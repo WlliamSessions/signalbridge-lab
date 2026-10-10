@@ -9,8 +9,87 @@ type CreateCustomerRequest = {
   plan?: string;
 };
 
+function formatCustomer(data: {
+  id: string;
+  email: string;
+  first_name: string;
+  last_name: string | null;
+  plan: string;
+  created_at: string;
+}) {
+  return {
+    id: data.id,
+    email: data.email,
+    firstName: data.first_name,
+    lastName: data.last_name,
+    plan: data.plan,
+    createdAt: data.created_at,
+  };
+}
+
+function unauthorizedResponse() {
+  return Response.json(
+    {
+      error: {
+        code: "unauthorized",
+        message: "A valid Bearer token is required.",
+      },
+    },
+    { status: 401 }
+  );
+}
+
+// GET - List all customers
+export async function GET(request: Request) {
+  if (!isAuthorized(request)) {
+    return unauthorizedResponse();
+  }
+
+  try {
+    const { data, error } = await supabase
+      .from("customers")
+      .select("*")
+      .order("created_at", { ascending: false })
+      .limit(100);
+
+    if (error) {
+      console.error("Supabase error:", error);
+
+      return Response.json(
+        {
+          error: {
+            code: "database_error",
+            message: "Unable to retrieve customers.",
+          },
+        },
+        { status: 500 }
+      );
+    }
+
+    return Response.json(
+      {
+        customers: (data ?? []).map(formatCustomer),
+        count: data?.length ?? 0,
+      },
+      { status: 200 }
+    );
+  } catch (error) {
+    console.error("GET customers error:", error);
+
+    return Response.json(
+      {
+        error: {
+          code: "internal_server_error",
+          message: "An unexpected error occurred.",
+        },
+      },
+      { status: 500 }
+    );
+  }
+}
+
+// POST - Create a customer
 export async function POST(request: Request) {
-  // Step 1: Authenticate the request.
   if (!isAuthorized(request)) {
     return Response.json(
       {
@@ -23,7 +102,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 2: Parse the incoming JSON.
   let body: CreateCustomerRequest;
 
   try {
@@ -40,7 +118,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 3: Validate required fields.
   if (
     typeof body !== "object" ||
     body === null ||
@@ -61,7 +138,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 4: Validate email format.
   const email = body.email.trim().toLowerCase();
 
   if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
@@ -76,7 +152,6 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 5: Validate optional fields.
   if (
     (body.lastName !== undefined &&
       typeof body.lastName !== "string") ||
@@ -94,7 +169,21 @@ export async function POST(request: Request) {
     );
   }
 
-  // Step 6: Save the customer in Supabase.
+  const validPlans = ["standard", "premium", "enterprise"];
+  const plan = body.plan ?? "standard";
+
+  if (!validPlans.includes(plan)) {
+    return Response.json(
+      {
+        error: {
+          code: "invalid_plan",
+          message: "Plan must be standard, premium, or enterprise.",
+        },
+      },
+      { status: 400 }
+    );
+  }
+
   try {
     const customerId = `cus_${crypto.randomUUID()}`;
 
@@ -105,7 +194,7 @@ export async function POST(request: Request) {
         email,
         first_name: body.firstName.trim(),
         last_name: body.lastName ?? null,
-        plan: body.plan ?? "standard",
+        plan,
       })
       .select()
       .single();
@@ -136,20 +225,9 @@ export async function POST(request: Request) {
       );
     }
 
-    // Step 7: Return the stored customer.
-    return Response.json(
-      {
-        id: data.id,
-        email: data.email,
-        firstName: data.first_name,
-        lastName: data.last_name,
-        plan: data.plan,
-        createdAt: data.created_at,
-      },
-      { status: 201 }
-    );
+    return Response.json(formatCustomer(data), { status: 201 });
   } catch (error) {
-    console.error("Unexpected error:", error);
+    console.error("POST customers error:", error);
 
     return Response.json(
       {
