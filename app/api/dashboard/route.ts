@@ -9,16 +9,18 @@ type CustomerInput = {
   id?: unknown;
 };
 
-const validPlans = ["standard", "premium", "enterprise"];
-
-function formatCustomer(customer: {
+type DatabaseCustomer = {
   id: string;
   email: string;
   first_name: string;
   last_name: string | null;
   plan: string;
   created_at: string;
-}) {
+};
+
+const validPlans = ["standard", "premium", "enterprise"];
+
+function formatCustomer(customer: DatabaseCustomer) {
   return {
     id: customer.id,
     email: customer.email,
@@ -40,25 +42,19 @@ function errorResponse(
   );
 }
 
-// Development-only dashboard access.
-// Never expose these database operations publicly without
-// authentication, authorization, and demo-data protections.
-function checkAccess() {
-  if (process.env.NODE_ENV === "production") {
-    return errorResponse(
-      "dashboard_unavailable",
-      "Dashboard access is disabled in production.",
-      403
-    );
-  }
-
-  return null;
-}
+// Public portfolio demo endpoint.
+//
+// This route uses real Supabase data and allows visitors
+// to demonstrate customer CRUD operations.
+//
+// Only fictional, disposable customer records should
+// be stored in this database.
+//
+// The Supabase secret remains server-side.
+// The separate /api/v1/customers endpoints continue
+// to require bearer-token authentication.
 
 export async function GET() {
-  const denied = checkAccess();
-  if (denied) return denied;
-
   try {
     const { data, error } = await supabase
       .from("customers")
@@ -68,6 +64,7 @@ export async function GET() {
 
     if (error) {
       console.error("Dashboard GET:", error);
+
       return errorResponse(
         "database_error",
         "Unable to load customers.",
@@ -75,11 +72,17 @@ export async function GET() {
       );
     }
 
-    return Response.json({
-      customers: (data ?? []).map(formatCustomer),
-    });
+    return Response.json(
+      { customers: (data ?? []).map(formatCustomer) },
+      {
+        headers: {
+          "Cache-Control": "no-store",
+        },
+      }
+    );
   } catch (error) {
     console.error("Dashboard GET:", error);
+
     return errorResponse(
       "internal_server_error",
       "An unexpected error occurred.",
@@ -89,9 +92,6 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const denied = checkAccess();
-  if (denied) return denied;
-
   let body: CustomerInput;
 
   try {
@@ -179,6 +179,7 @@ export async function POST(request: Request) {
       }
 
       console.error("Dashboard POST:", error);
+
       return errorResponse(
         "database_error",
         "Unable to create customer.",
@@ -191,6 +192,7 @@ export async function POST(request: Request) {
     });
   } catch (error) {
     console.error("Dashboard POST:", error);
+
     return errorResponse(
       "internal_server_error",
       "An unexpected error occurred.",
@@ -200,9 +202,6 @@ export async function POST(request: Request) {
 }
 
 export async function PATCH(request: Request) {
-  const denied = checkAccess();
-  if (denied) return denied;
-
   let body: CustomerInput;
 
   try {
@@ -242,6 +241,7 @@ export async function PATCH(request: Request) {
         400
       );
     }
+
     updates.first_name = body.firstName.trim();
   }
 
@@ -253,6 +253,7 @@ export async function PATCH(request: Request) {
         400
       );
     }
+
     updates.last_name = body.lastName.trim();
   }
 
@@ -267,6 +268,7 @@ export async function PATCH(request: Request) {
         400
       );
     }
+
     updates.plan = body.plan;
   }
 
@@ -288,6 +290,7 @@ export async function PATCH(request: Request) {
 
     if (error) {
       console.error("Dashboard PATCH:", error);
+
       return errorResponse(
         "database_error",
         "Unable to update customer.",
@@ -306,6 +309,7 @@ export async function PATCH(request: Request) {
     return Response.json(formatCustomer(data));
   } catch (error) {
     console.error("Dashboard PATCH:", error);
+
     return errorResponse(
       "internal_server_error",
       "An unexpected error occurred.",
@@ -315,9 +319,6 @@ export async function PATCH(request: Request) {
 }
 
 export async function DELETE(request: Request) {
-  const denied = checkAccess();
-  if (denied) return denied;
-
   let body: CustomerInput;
 
   try {
@@ -354,6 +355,7 @@ export async function DELETE(request: Request) {
 
     if (error) {
       console.error("Dashboard DELETE:", error);
+
       return errorResponse(
         "database_error",
         "Unable to delete customer.",
@@ -375,6 +377,7 @@ export async function DELETE(request: Request) {
     });
   } catch (error) {
     console.error("Dashboard DELETE:", error);
+
     return errorResponse(
       "internal_server_error",
       "An unexpected error occurred.",
